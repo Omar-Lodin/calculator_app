@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-void main() =>
-  runApp(const CalculatorApp());
+void main() => runApp(const CalculatorApp());
 
 class CalculatorApp extends StatelessWidget {
   const CalculatorApp({super.key});
@@ -10,9 +9,7 @@ class CalculatorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Calculator App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue),
       home: const CalculatorScreen(),
     );
   }
@@ -46,57 +43,101 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     });
   }
 
-String _evaluateExpression(String expression) {
-  // Simple evaluation logic (for demonstration purposes)
-  
-  try {
-    final result = _calculate(expression);
-    return result.toString();
-  } catch (e) {
-    return 'Error';
+  String _evaluateExpression(String expression) {
+    final answer = _calculate(expression);
+
+    final text = answer.toString();
+    return text.endsWith('.0') ? text.substring(0, text.length - 2) : text;
   }
-}
 
+  double _calculate(String expression) {
+    final input = expression.replaceAll(RegExp(r'\s+'), '');
+    int position = 0;
 
-String _calculate(String expression) {
-  // This is a very basic implementation and does not handle operator precedence or parentheses.
-
-  final tokens = expression.split(RegExp(r'([+\-*/])')).where((token) => token.isNotEmpty).toList();
-  double result = double.parse(tokens[0]);
-
-  for (int i = 1; i < tokens.length; i += 2) {
-    final operator = tokens[i];
-    final nextValue = double.parse(tokens[i + 1]);
-
-    switch (operator) {
-      case '+':
-        result += nextValue;
-        break;
-      case '-':
-        result -= nextValue;
-        break;
-      case '*':
-        result *= nextValue;
-        break;
-      case '/':
-        if (nextValue == 0) throw Exception('Division by zero');
-        result /= nextValue;
-        break;
-      default:
-        throw Exception('Invalid operator');
+    if (input.isEmpty) {
+      throw const FormatException('Enter a valid expression');
     }
+
+    double readNumber() {
+      final start = position;
+      bool hasDecimal = false;
+      bool hasDigit = false;
+
+      while (position < input.length) {
+        final char = input[position];
+        if ('0123456789'.contains(char)) {
+          hasDigit = true;
+          position++;
+        } else if (char == '.' && !hasDecimal) {
+          hasDecimal = true;
+          position++;
+        } else {
+          break;
+        }
+      }
+
+      if (!hasDigit) {
+        throw const FormatException('Invalid number format');
+      }
+      final number = double.parse(input.substring(start, position));
+
+      if (!number.isFinite) {
+        throw const FormatException('Number is too large or too small');
+      }
+
+      return number;
+    }
+
+    double readTerm() {
+      double value = readNumber();
+
+      while (position < input.length &&
+          (input[position] == '*' || input[position] == '/')) {
+        final operator = input[position];
+        position++;
+        final nextValue = readNumber();
+
+        if (operator == '*') {
+          value *= nextValue;
+        } else if (operator == '/') {
+          if (nextValue == 0) {
+            throw const FormatException('Division by zero');
+          }
+          value /= nextValue;
+        }
+      }
+      return value;
+    }
+
+    double answer = readTerm();
+
+    while (position < input.length) {
+      final operator = input[position];
+
+      if (operator != '+' && operator != '-') {
+        throw const FormatException('Invalid operator');
+      }
+      position++;
+      final nextValue = readTerm();
+
+      if (operator == '+') {
+        answer += nextValue;
+      } else if (operator == '-') {
+        answer -= nextValue;
+      }
+    }
+
+    if (!answer.isFinite) {
+      throw const FormatException('Result is too large or too small');
+    }
+
+    return answer == 0 ? 0.0 : answer;
   }
-
-  return result.toString();
-}
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Calculator'),
-      ),
+      appBar: AppBar(title: const Text('Calculator')),
       body: Column(
         children: [
           Expanded(
@@ -107,10 +148,7 @@ String _calculate(String expression) {
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    _input,
-                    style: const TextStyle(fontSize: 32.0),
-                  ),
+                  Text(_input, style: const TextStyle(fontSize: 32.0)),
                   const SizedBox(height: 8.0),
                   Text(
                     _result,
@@ -147,4 +185,3 @@ String _calculate(String expression) {
     );
   }
 }
-
