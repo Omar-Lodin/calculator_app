@@ -97,7 +97,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       } on FormatException catch (e) {
         _clear();
         _input = 'Error';
-        _result = e.message;
+        _result = '${e.message}. Enter a number to restart or press C to clear.';
         _hasError = true;
       }
     });
@@ -118,7 +118,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     if (_finish || _hasError) {
       _clear();
     }
-
+    _result = '';
+    
     if (_waitingForOperand || _input == '0') {
       _input = digit;
     } else {
@@ -164,8 +165,15 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   void _finishCalculation() {
-    if (_waitingForOperand || _finish || _hasError) {
+    if (_finish || _hasError) {
       return;
+    }
+
+    if (_waitingForOperand) {
+      _result = _pendingOperator != null
+          ? 'Enter the next number, followed by =. Press C to clear.'
+          : 'Please enter a number first. Press C to clear.';
+          return;
     }
 
     _expression = '$_expression =';
