@@ -1,143 +1,249 @@
 import 'package:flutter/material.dart';
-
 void main() => runApp(const CalculatorApp());
 
-class CalculatorApp extends StatelessWidget {
+class CalculatorApp extends StatefulWidget {
   const CalculatorApp({super.key});
+
+  @override
+  State<CalculatorApp> createState() => _CalculatorAppState();
+}
+
+class _CalculatorAppState extends State<CalculatorApp> {
+  bool _isDarkMode = false;
+
+  ThemeData _buildTheme(Brightness brightness) {
+    final colors = ColorScheme.fromSeed(
+      seedColor: Colors.blue,
+      brightness: brightness,
+    );
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colors,
+      scaffoldBackgroundColor: colors.surface,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.primaryContainer,
+        foregroundColor: colors.onPrimaryContainer,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: colors.primaryContainer,
+          foregroundColor: colors.onPrimaryContainer,
+        ),
+      ),
+      dividerTheme: DividerThemeData(color: colors.outlineVariant),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Calculator App',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const CalculatorScreen(),
+      debugShowCheckedModeBanner: false,
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
+      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      themeAnimationDuration: const Duration(milliseconds: 400),
+      themeAnimationCurve: Curves.easeInOut,
+      home: CalculatorScreen(
+        isDark: _isDarkMode,
+        onThemeChanged: (value) {
+          setState(() {
+            _isDarkMode = value;
+          });
+        },
+      ),
     );
   }
 }
 
 class CalculatorScreen extends StatefulWidget {
-  const CalculatorScreen({super.key});
+  const CalculatorScreen({
+    super.key,
+    required this.isDark,
+    required this.onThemeChanged,
+  });
+
+  final bool isDark;
+  final ValueChanged<bool> onThemeChanged;
 
   @override
   State<CalculatorScreen> createState() => _CalculatorScreenState();
 }
 
 class _CalculatorScreenState extends State<CalculatorScreen> {
-  String _input = '';
+  String _input = '0';
   String _result = '';
+  String _expression = '';
+  double? _accumulator;
+  String? _pendingOperator;
+  bool _waitingForOperand = true;
+  bool _finish = false;
+  bool _hasError = false;
 
   void _onButtonPressed(String value) {
     setState(() {
-      if (value == 'C') {
-        _input = '';
-        _result = '';
-      } else if (value == '=') {
-        try {
-          _result = _evaluateExpression(_input);
-        } catch (e) {
-          _result = 'Error';
+      try {
+        if (value == 'C') {
+          _clear();
+        } else if (RegExp(r'^[0-9]$').hasMatch(value)) {
+          _enterDigit(value);
+        } else if (value == '=') {
+          _finishCalculation();
+        } else if (['+', '-', '*', '/'].contains(value)) {
+          if (!_hasError) {
+            _chooseOperator(value);
+          }
         }
-      } else {
-        _input += value;
+      } on FormatException catch (e) {
+        _clear();
+        _input = 'Error';
+        _result = e.message;
+        _hasError = true;
       }
     });
   }
 
-  String _evaluateExpression(String expression) {
-    final answer = _calculate(expression);
-
-    final text = answer.toString();
-    return text.endsWith('.0') ? text.substring(0, text.length - 2) : text;
+  void _clear() {
+    _input = '0';
+    _result = '';
+    _expression = '';
+    _accumulator = null;
+    _pendingOperator = null;
+    _waitingForOperand = true;
+    _finish = false;
+    _hasError = false;
   }
 
-  double _calculate(String expression) {
-    final input = expression.replaceAll(RegExp(r'\s+'), '');
-    int position = 0;
-
-    if (input.isEmpty) {
-      throw const FormatException('Enter a valid expression');
+  void _enterDigit(String digit) {
+    if (_finish || _hasError) {
+      _clear();
     }
 
-    double readNumber() {
-      final start = position;
-      bool hasDecimal = false;
-      bool hasDigit = false;
+    if (_waitingForOperand || _input == '0') {
+      _input = digit;
+    } else {
+      _input += digit;
+    }
 
-      while (position < input.length) {
-        final char = input[position];
-        if ('0123456789'.contains(char)) {
-          hasDigit = true;
-          position++;
-        } else if (char == '.' && !hasDecimal) {
-          hasDecimal = true;
-          position++;
-        } else {
-          break;
+    _waitingForOperand = false;
+
+    if (_pendingOperator != null && _accumulator != null) {
+      _expression = '${_formatNumber(_accumulator!)} $_pendingOperator $_input';
+    } else {
+      _expression = _input;
+    }
+  }
+
+  void _chooseOperator(String operator) {
+    if (_waitingForOperand) {
+      _accumulator ??= double.parse(_input);
+      _pendingOperator = operator;
+      _expression = '${_formatNumber(_accumulator!)} $operator';
+      return;
+    }
+
+    final operand = double.parse(_input);
+
+    if (!operand.isFinite) {
+      throw const FormatException('Number is too large or too small');
+    }
+
+    if (_accumulator != null && _pendingOperator != null) {
+      _accumulator = _applyOperator(_accumulator!, operand, _pendingOperator!);
+    } else {
+      _accumulator = operand;
+    }
+
+    _input = _formatNumber(_accumulator!);
+    _result = 'Running total: $_input';
+
+    _pendingOperator = operator;
+    _expression = '$_input $operator';
+    _waitingForOperand = true;
+    _finish = false;
+  }
+
+  void _finishCalculation() {
+    if (_waitingForOperand || _finish || _hasError) {
+      return;
+    }
+
+    _expression = '$_expression =';
+    final operand = double.parse(_input);
+
+    if (!operand.isFinite) {
+      throw const FormatException('Number is too large or too small');
+    }
+
+    if (_accumulator != null && _pendingOperator != null) {
+      _accumulator = _applyOperator(_accumulator!, operand, _pendingOperator!);
+    } else {
+      _accumulator = operand;
+    }
+
+    _input = _formatNumber(_accumulator!);
+    _result = 'Result: $_input';
+    _pendingOperator = null;
+    _waitingForOperand = true;
+    _finish = true;
+  }
+
+  double _applyOperator(double first, double second, String operator) {
+    double answer;
+
+    switch (operator) {
+      case '+':
+        answer = first + second;
+        break;
+      case '-':
+        answer = first - second;
+        break;
+      case '*':
+        answer = first * second;
+        break;
+      case '/':
+        if (second == 0) {
+          throw const FormatException('Division by zero');
         }
-      }
-
-      if (!hasDigit) {
-        throw const FormatException('Invalid number format');
-      }
-      final number = double.parse(input.substring(start, position));
-
-      if (!number.isFinite) {
-        throw const FormatException('Number is too large or too small');
-      }
-
-      return number;
-    }
-
-    double readTerm() {
-      double value = readNumber();
-
-      while (position < input.length &&
-          (input[position] == '*' || input[position] == '/')) {
-        final operator = input[position];
-        position++;
-        final nextValue = readNumber();
-
-        if (operator == '*') {
-          value *= nextValue;
-        } else if (operator == '/') {
-          if (nextValue == 0) {
-            throw const FormatException('Division by zero');
-          }
-          value /= nextValue;
-        }
-      }
-      return value;
-    }
-
-    double answer = readTerm();
-
-    while (position < input.length) {
-      final operator = input[position];
-
-      if (operator != '+' && operator != '-') {
+        answer = first / second;
+        break;
+      default:
         throw const FormatException('Invalid operator');
-      }
-      position++;
-      final nextValue = readTerm();
-
-      if (operator == '+') {
-        answer += nextValue;
-      } else if (operator == '-') {
-        answer -= nextValue;
-      }
     }
-
     if (!answer.isFinite) {
       throw const FormatException('Result is too large or too small');
     }
+    return answer;
+  }
 
-    return answer == 0 ? 0.0 : answer;
+  String _formatNumber(double number) {
+    final text = number.toString();
+    return text.endsWith('.0') ? text.substring(0, text.length - 2) : text;
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Calculator')),
+      appBar: AppBar(
+        title: const Text('Calculator'),
+        actions: [
+          Icon(widget.isDark ? Icons.dark_mode : Icons.light_mode),
+          Switch(
+            value: widget.isDark,
+            onChanged: widget.onThemeChanged,
+            activeThumbColor: colors.primary,
+            activeTrackColor: colors.primaryContainer,
+            inactiveThumbColor: colors.outline,
+            inactiveTrackColor: colors.surfaceContainerHighest,
+            thumbIcon: WidgetStateProperty.resolveWith<Icon?>(
+              (states) =>
+                  Icon(widget.isDark ? Icons.dark_mode : Icons.light_mode),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -148,11 +254,26 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(_input, style: const TextStyle(fontSize: 32.0)),
-                  const SizedBox(height: 8.0),
+                  Text(
+                    _expression,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _input,
+                    style: TextStyle(fontSize: 32, color: colors.onSurface),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                     _result,
-                    style: const TextStyle(fontSize: 24.0, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 24,
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
