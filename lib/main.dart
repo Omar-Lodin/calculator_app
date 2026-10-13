@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 void main() => runApp(const CalculatorApp());
 
 class CalculatorApp extends StatefulWidget {
@@ -25,10 +26,30 @@ class _CalculatorAppState extends State<CalculatorApp> {
         foregroundColor: colors.onPrimaryContainer,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: colors.primaryContainer,
-          foregroundColor: colors.onPrimaryContainer,
-        ),
+        style:
+            ElevatedButton.styleFrom(
+              backgroundColor: colors.primaryContainer,
+              foregroundColor: colors.onPrimaryContainer,
+              minimumSize: const Size(0, 56),
+            ).copyWith(
+              animationDuration: const Duration(milliseconds: 120),
+              splashFactory: InkRipple.splashFactory,
+              overlayColor: WidgetStateProperty.resolveWith<Color?>((states) {
+                if (states.contains(WidgetState.pressed)) {
+                  return colors.onPrimaryContainer.withValues(alpha: 0.16);
+                }
+
+                if (states.contains(WidgetState.hovered) ||
+                    states.contains(WidgetState.focused)) {
+                  return colors.onPrimaryContainer.withValues(alpha: 0.08);
+                }
+
+                return null;
+              }),
+              elevation: WidgetStateProperty.resolveWith<double>((states) {
+                return states.contains(WidgetState.pressed) ? 0 : 2;
+              }),
+            ),
       ),
       dividerTheme: DividerThemeData(color: colors.outlineVariant),
     );
@@ -97,7 +118,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       } on FormatException catch (e) {
         _clear();
         _input = 'Error';
-        _result = '${e.message}. Enter a number to restart or press C to clear.';
+        _result =
+            '${e.message}. Enter a number to restart or press C to clear.';
         _hasError = true;
       }
     });
@@ -119,7 +141,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _clear();
     }
     _result = '';
-    
+
     if (_waitingForOperand || _input == '0') {
       _input = digit;
     } else {
@@ -173,7 +195,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _result = _pendingOperator != null
           ? 'Enter the next number, followed by =. Press C to clear.'
           : 'Please enter a number first. Press C to clear.';
-          return;
+      return;
     }
 
     _expression = '$_expression =';
